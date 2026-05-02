@@ -113,19 +113,26 @@ wss.on('connection', (ws) => {
 
 // ─── Express Middlewares ──────────────────────────────────────────────────────
 
-// Dynamic CORS policy — add your published extension ID to EXTENSION_ID env var before deploying.
+// Dynamic CORS policy — allows the dashboard, local dev, and ANY Chrome extension during development.
 const allowedOrigins = [
   'http://localhost:3000',
   'http://localhost:5173',  // Vite dev server (web dashboard)
   process.env.FRONTEND_URL, // Production dashboard URL
-  `chrome-extension://${process.env.EXTENSION_ID || 'YOUR_EXTENSION_ID_HERE'}`,
-].filter(Boolean); // Remove undefined/null if FRONTEND_URL is not set
+].filter(Boolean);
 
 app.use(cors({
   origin: (origin, callback) => {
-    // Allow requests with no origin (e.g. server-to-server, curl)
+    // 1. Allow requests with no origin (like Postman or mobile apps)
     if (!origin) return callback(null, true);
+
+    // 2. Allow if origin is in our explicit allowed list
     if (allowedOrigins.includes(origin)) return callback(null, true);
+
+    // 3. Dynamic check: Allow ANY Chrome Extension origin (starts with chrome-extension://)
+    // This allows team members with different developer extension IDs to connect.
+    if (origin.startsWith('chrome-extension://')) return callback(null, true);
+
+    // 4. Otherwise, block the request
     callback(new Error(`CORS: origin '${origin}' is not allowed`));
   },
   credentials: true,
