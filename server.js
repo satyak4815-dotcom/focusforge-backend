@@ -14,10 +14,18 @@ app.use(express.json());
 // 2. Import Your New Routes (Plugging them in)
 const authRoutes = require('./routes/auth');
 const xpRoutes = require('./routes/xp');
+const sessionRoutes = require('./routes/sessions');
+const blocklistRoutes = require('./routes/blocklist');
+const interceptionRoutes = require('./routes/interceptions');
+const squadRoutes = require('./routes/squads');
 
 // 3. Route Wiring (The Signposts)
 app.use('/api/auth', authRoutes);
 app.use('/api/user', xpRoutes);
+app.use('/api/sessions', sessionRoutes);
+app.use('/api/blocklist', blocklistRoutes);
+app.use('/api/interceptions', interceptionRoutes);
+app.use('/api/squads', squadRoutes);
 
 // 4. Test Route (To check if the API is awake)
 app.get('/', (req, res) => {

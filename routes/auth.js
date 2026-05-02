@@ -7,16 +7,16 @@ const User = require('../models/User');
 // POST /register - Register a new user
 router.post('/register', async (req, res, next) => {
   try {
-    const { username, password } = req.body;
+    const { username, email, password } = req.body;
 
     // Input Validation
-    if (!username || !password || username.trim() === '' || password.trim() === '') {
-      return res.status(400).json({ message: 'Username and password cannot be empty' });
+    if (!username || !email || !password || username.trim() === '' || email.trim() === '' || password.trim() === '') {
+      return res.status(400).json({ message: 'Username, email, and password cannot be empty' });
     }
 
-    const existingUser = await User.findOne({ username });
+    const existingUser = await User.findOne({ $or: [{ username }, { email }] });
     if (existingUser) {
-      return res.status(400).json({ message: 'User already exists' });
+      return res.status(400).json({ message: 'User with this username or email already exists' });
     }
 
     const salt = await bcrypt.genSalt(10);
@@ -24,6 +24,7 @@ router.post('/register', async (req, res, next) => {
 
     const newUser = new User({
       username,
+      email,
       password: hashedPassword
     });
 
@@ -38,14 +39,18 @@ router.post('/register', async (req, res, next) => {
 // POST /login - Authenticate a user and issue a JWT
 router.post('/login', async (req, res, next) => {
   try {
-    const { username, password } = req.body;
+    const { identifier, username, password } = req.body;
+    const loginIdentifier = identifier || username; // Support both 'identifier' and legacy 'username' field
 
     // Input Validation
-    if (!username || !password || username.trim() === '' || password.trim() === '') {
-      return res.status(400).json({ message: 'Username and password cannot be empty' });
+    if (!loginIdentifier || !password || loginIdentifier.trim() === '' || password.trim() === '') {
+      return res.status(400).json({ message: 'Identifier and password cannot be empty' });
     }
 
-    const user = await User.findOne({ username });
+    const isEmail = loginIdentifier.includes('@');
+    const query = isEmail ? { email: loginIdentifier } : { username: loginIdentifier };
+
+    const user = await User.findOne(query);
     if (!user) {
       return res.status(400).json({ message: 'Invalid credentials' });
     }
@@ -78,6 +83,17 @@ router.post('/login', async (req, res, next) => {
     res.json({ token, user: userResponse, message: 'Logged in successfully' });
   } catch (error) {
     next(error); // Pass error to global error handler
+  }
+});
+
+// GET /profile - Fetch current user profile
+router.get('/profile', require('../middleware/auth'), async (req, res, next) => {
+  try {
+    const user = await User.findById(req.user.userId).select('-password');
+    if (!user) return res.status(404).json({ message: 'User not found' });
+    res.json(user);
+  } catch (error) {
+    next(error);
   }
 });
 

@@ -3,38 +3,17 @@ const router = express.Router();
 const jwt = require('jsonwebtoken');
 const User = require('../models/User');
 
-const verifyToken = (req, res, next) => {
-  const authHeader = req.headers['authorization'];
-  const token = authHeader && authHeader.split(' ')[1];
-
-  if (!token) {
-    return res.status(401).json({ message: 'Access Denied: No token provided' });
-  }
-
-  try {
-    if (!process.env.JWT_SECRET) {
-        throw new Error('JWT_SECRET is not defined in environment variables');
-    }
-    
-    const verified = jwt.verify(token, process.env.JWT_SECRET);
-    req.user = verified;
-    next();
-  } catch (error) {
-    // If it's our internal error (missing secret), pass to global handler
-    if (error.message.includes('JWT_SECRET')) {
-        return next(error);
-    }
-    res.status(403).json({ message: 'Invalid or Expired Token' });
-  }
-};
+const verifyToken = require('../middleware/auth');
 
 // POST /add-xp
 router.post('/add-xp', verifyToken, async (req, res, next) => {
   try {
+    const xpToAdd = req.body.xp && req.body.xp > 0 ? req.body.xp : 10;
+
     // Atomic update using $inc operator
     const user = await User.findByIdAndUpdate(
       req.user.userId,
-      { $inc: { focusXP: 10 } },
+      { $inc: { focusXP: xpToAdd } },
       { new: true } // Returns the newly updated document
     );
 
@@ -43,20 +22,94 @@ router.post('/add-xp', verifyToken, async (req, res, next) => {
     }
 
     const currentXP = user.focusXP;
-    
-    // Dynamic Leveling Math
-    // Assuming Level 1 is the base (0-99 XP). At 100 XP, they hit Level 2.
-    const level = Math.floor(currentXP / 100) + 1; 
+    const newLevel = Math.floor(currentXP / 100) + 1;
+
+    // Update level if changed
+    if (user.level !== newLevel) {
+      user.level = newLevel;
+      await user.save();
+    }
+
     const xpToNextLevel = 100 - (currentXP % 100);
 
-    res.json({ 
-      message: 'XP added successfully', 
+    // Keep old response shape for backward compatibility
+    res.json({
+      message: 'XP added successfully',
       currentXP,
-      level,
+      level: newLevel,
       xpToNextLevel
     });
   } catch (error) {
     next(error); // Pass error to global error handler
+  }
+});
+
+// POST /deduct-xp
+router.post('/deduct-xp', verifyToken, async (req, res, next) => {
+  try {
+    const xpToDeduct = req.body.xp && req.body.xp > 0 ? req.body.xp : 0;
+    const user = await User.findById(req.user.userId);
+    if (!user) {
+      return res.status(404).json({ success: false, message: 'User not found' });
+    }
+
+    let newXP = user.focusXP - xpToDeduct;
+    if (newXP < 0) newXP = 0;
+
+    user.focusXP = newXP;
+    user.updateLevel();
+    await user.save();
+
+    // New endpoint, use standard success format
+    res.json({
+      success: true,
+      data: {
+        focusXP: user.focusXP,
+        level: user.level
+      }
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// GET /profile
+router.get('/profile', verifyToken, async (req, res, next) => {
+  try {
+    const user = await User.findById(req.user.userId).select('-password');
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+    res.json({
+      username: user.username,
+      email: user.email,
+      focusXP: user.focusXP,
+      focusCoins: user.focusCoins,
+      totalFocusMinutes: user.totalFocusMinutes,
+      distractionsBlocked: user.distractionsBlocked,
+      blockedApps: user.blockedApps,
+      blockedSites: user.blockedSites || []
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// GET /stats
+router.get('/stats', verifyToken, async (req, res, next) => {
+  try {
+    const user = await User.findById(req.user.userId).select('-password');
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+    res.json({
+      focusXP: user.focusXP,
+      focusCoins: user.focusCoins,
+      totalFocusMinutes: user.totalFocusMinutes,
+      distractionsBlocked: user.distractionsBlocked
+    });
+  } catch (error) {
+    next(error);
   }
 });
 

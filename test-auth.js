@@ -10,7 +10,7 @@ const testRegistration = async () => {
                 password: 'securepassword123'
             })
         });
-        
+
         const data = await response.json();
         console.log('Server Status Code:', response.status);
         console.log('Server Response:', data);
