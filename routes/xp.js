@@ -6,15 +6,34 @@ const User = require('../models/User');
 const verifyToken = require('../middleware/auth');
 
 // POST /add-xp
+// Expects { xpDelta: <positive integer> } — always send a strict 1-unit delta per minute tick.
+// The `xp` key is accepted as a fallback for backward compatibility.
+// The backend uses MongoDB's $inc operator so this endpoint is safe to call repeatedly;
+// sending cumulative totals instead of deltas WILL cause exponential XP inflation.
 router.post('/add-xp', verifyToken, async (req, res, next) => {
   try {
-    const xpToAdd = req.body.xp && req.body.xp > 0 ? req.body.xp : 10;
+    // Accept xpDelta (new canonical key) or xp (legacy fallback)
+    const raw = req.body.xpDelta ?? req.body.xp;
+    const xpToAdd = parseInt(raw, 10);
 
-    // Atomic update using $inc operator
+    if (!xpToAdd || xpToAdd <= 0) {
+      return res.status(400).json({
+        message: 'xpDelta must be a positive integer (e.g. { xpDelta: 1 }). ' +
+                 'Send a per-tick delta, never a cumulative total.'
+      });
+    }
+
+    // Single atomic operation: increment XP and focus minutes together.
+    // This prevents the double-award bug where session /end also added XP.
     const user = await User.findByIdAndUpdate(
       req.user.userId,
-      { $inc: { focusXP: xpToAdd } },
-      { new: true } // Returns the newly updated document
+      {
+        $inc: {
+          focusXP: xpToAdd,
+          totalFocusMinutes: xpToAdd  // 1 XP == 1 minute, so delta doubles as minute count
+        }
+      },
+      { new: true }
     );
 
     if (!user) {
@@ -24,7 +43,7 @@ router.post('/add-xp', verifyToken, async (req, res, next) => {
     const currentXP = user.focusXP;
     const newLevel = Math.floor(currentXP / 100) + 1;
 
-    // Update level if changed
+    // Update level if it changed — requires a second write but only happens on level-up
     if (user.level !== newLevel) {
       user.level = newLevel;
       await user.save();
@@ -32,7 +51,6 @@ router.post('/add-xp', verifyToken, async (req, res, next) => {
 
     const xpToNextLevel = 100 - (currentXP % 100);
 
-    // Keep old response shape for backward compatibility
     res.json({
       message: 'XP added successfully',
       currentXP,
@@ -40,7 +58,7 @@ router.post('/add-xp', verifyToken, async (req, res, next) => {
       xpToNextLevel
     });
   } catch (error) {
-    next(error); // Pass error to global error handler
+    next(error);
   }
 });
 

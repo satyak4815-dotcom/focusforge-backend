@@ -30,7 +30,10 @@ router.post('/start', verifyToken, async (req, res, next) => {
   }
 });
 
-// PATCH /api/sessions/:id/end  — session completed successfully, award XP
+// PATCH /api/sessions/:id/end  — marks the session as complete.
+// NOTE: XP and totalFocusMinutes are NO LONGER awarded here.
+// They are accumulated atomically via POST /api/xp/add-xp (one call per minute tick).
+// Awarding XP here as well would cause double-counting and exponential XP inflation.
 router.patch('/:id/end', verifyToken, async (req, res, next) => {
   try {
     const session = await FocusSession.findOne({
@@ -41,28 +44,21 @@ router.patch('/:id/end', verifyToken, async (req, res, next) => {
     if (!session) return res.status(404).json({ message: 'Session not found' });
     if (session.status !== 'active') return res.status(400).json({ message: 'Session is not active' });
 
-    // XP = 1 per minute, floored
-    const xpEarned = Math.floor(session.durationMins);
-
     session.status = 'completed';
     session.endTime = new Date();
-    session.xpEarned = xpEarned;
+    // xpEarned is tracked only for record-keeping; XP was already applied per-minute.
+    session.xpEarned = Math.floor(session.durationMins);
     await session.save();
 
-    // Award XP + update totalFocusMinutes atomically
+    // Only update streak here — XP and minutes are already handled by /add-xp ticks.
     const user = await User.findById(req.user.userId);
     if (!user) return res.status(404).json({ message: 'User not found' });
 
-    user.focusXP += xpEarned;
-    user.totalFocusMinutes += session.durationMins;
-    user.updateLevel();
     user.updateStreak();
-    
     await user.save();
 
     res.json({
-      message: 'Session complete! XP awarded.',
-      xpEarned,
+      message: 'Session complete!',
       focusXP: user.focusXP,
       level: user.level,
       currentStreak: user.currentStreak
