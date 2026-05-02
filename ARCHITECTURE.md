@@ -31,8 +31,9 @@ graph TD
 ### A. Session Engine (`routes/sessions.js`)
 Handles the lifecycle of a focus block. 
 - **Start**: Initializes a session timestamp.
-- **End**: Calculates duration, awards XP (1 XP/min), and updates user streak logic.
-- **Fail/Abort**: Implements **"All or Nothing"** logic. If a session is manually terminated or fails due to a Hard Mode violation, any XP accumulated during that session is instantly reverted from the user's `globalXP`.
+- **Incremental Sync**: During an active session, the extension sends a strict **delta payload** (`{ xpDelta: 1 }`) to `/api/xp/add-xp` every 60 seconds. This ensures XP and `totalFocusMinutes` are updated atomically in real-time.
+- **End**: Marks the session as completed and updates streak logic. **Crucially, it no longer awards XP at this stage** to prevent double-counting (since XP was already accumulated via minute-ticks).
+- **Fail/Abort**: Marks the session as failed. Future iterations may implement XP rollbacks for failed sessions.
 
 ### B. Identity & Social (`routes/auth.js`, `routes/squads.js`)
 - **Stateless Auth**: Uses JWT with a 7-day TTL.
@@ -45,10 +46,12 @@ Handles the lifecycle of a focus block.
 
 ## 3. Real-time State Synchronization
 
-### 📈 Smooth XP Formula
-To prevent visual "jitter" or resets when the background alarm is delayed, the UI uses a **Timer-Driven Smooth XP** formula:
-`DisplayXP = Math.max(0, (ElapsedTime / 60000) - TotalPenalties)`
-This ensures the decimal part ticks up perfectly in sync with the countdown timer, while the whole part is corrected by any server-side penalties.
+### 📈 Delta-Based XP Sync
+To prevent cumulative XP bugs and visual jitter, FocusForge uses a **Strict Delta Sync** mechanism:
+1. The extension tracks local session time.
+2. Every 60 seconds of focus, it sends `{ xpDelta: 1 }` to the backend.
+3. The backend uses MongoDB's `$inc` operator to atomically increment `focusXP` and `totalFocusMinutes`.
+4. This ensures that even if a network request is retried or the extension is reloaded, the XP growth remains linear and accurate.
 
 ## 4. Extended Data Model
 

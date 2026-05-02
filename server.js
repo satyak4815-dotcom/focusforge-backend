@@ -8,7 +8,24 @@ const cors = require('cors');
 const app = express();
 
 // 1. Middlewares (The Bouncers)
-app.use(cors({ origin: true, credentials: true }));
+
+// Dynamic CORS policy — add your published extension ID to this list before deploying.
+const allowedOrigins = [
+  'http://localhost:3000',
+  'http://localhost:5173',                      // Vite dev server (web dashboard)
+  `chrome-extension://${process.env.EXTENSION_ID || 'YOUR_EXTENSION_ID_HERE'}`,
+];
+
+app.use(cors({
+  origin: (origin, callback) => {
+    // Allow requests with no origin (e.g. server-to-server, curl)
+    if (!origin) return callback(null, true);
+    if (allowedOrigins.includes(origin)) return callback(null, true);
+    callback(new Error(`CORS: origin '${origin}' is not allowed`));
+  },
+  credentials: true,
+}));
+
 app.use(express.json());
 
 // 2. Import Your New Routes (Plugging them in)
@@ -49,7 +66,8 @@ app.use((err, req, res, next) => {
 });
 
 // 7. Start the Engine
-const PORT = process.env.PORT || 5000;
+// Render injects process.env.PORT automatically. Falls back to 3000 for local dev.
+const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
     console.log(`🚀 Server is listening on port ${PORT}`);
 });

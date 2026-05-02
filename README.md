@@ -4,9 +4,8 @@ FocusForge is a high-performance productivity suite backend refactored to power 
 
 ## 🚀 Features
 
-- **Gamified Productivity**: Track focus sessions with unified **Smooth XP** (real-time decimal tracking) and dynamic leveling.
-- **Strict Focus Enforcement**: "All or Nothing" XP logic. Reverts all session XP if manually stopped or if Hard Mode is violated.
-- **Stolen Time Bypass**: A 2-minute "stolen time" grace period after answering mindfulness questions, followed by an automatic hard reload and re-block.
+- **Gamified Productivity**: Track focus sessions with unified **Strict Delta XP** (per-minute increments) and dynamic leveling.
+- **Delta-Based Synchronization**: Prevents exponential XP inflation by using atomic `$inc` updates for both XP and focus minutes every 60 seconds.
 - **Chrome Extension Support**: CORS-optimized for `chrome-extension://` origins.
 - **Site Blocking & Mindfulness**: Manage custom blocklists and log mindfulness interception events.
 - **Social Squads**: Create or join squads with live focus status and competitive leaderboards.
@@ -47,15 +46,15 @@ FocusForge-Backend/
 |--------|---------------|------------------------------|------|
 | GET    | `/profile`    | Fetch full user profile      | Yes  |
 | GET    | `/stats`      | Fetch productivity stats     | Yes  |
-| POST   | `/add-xp`     | Increment XP (Fixed or custom)| Yes  |
-| POST   | `/deduct-xp`  | Deduct XP (Penalty logic)    | Yes  |
+| POST   | `/add-xp`     | Increment XP & Minutes (expects `{ xpDelta: 1 }`)| Yes  |
+| POST   | `/deduct-xp`  | Deduct XP (Penalty logic)                        | Yes  |
 
 ### ⏱️ Focus Sessions (`/api/sessions`)
 | Method | Endpoint    | Description                                      | Auth |
 |--------|-------------|--------------------------------------------------|------|
 | POST   | `/start`    | Start a new focus session                        | Yes  |
-| PATCH  | `/:id/end`  | Complete session and award XP                    | Yes  |
-| PATCH  | `/:id/fail` | Mark session as failed (no XP)                   | Yes  |
+| PATCH  | `/:id/end`  | Complete session (Marks status & updates streak) | Yes  |
+| PATCH  | `/:id/fail` | Mark session as failed                           | Yes  |
 | GET    | `/history`  | Get last 20 focus sessions                       | Yes  |
 
 ### 🚫 Blocklist (`/api/blocklist`)
