@@ -1,39 +1,49 @@
 # 🛡️ FocusForge Backend (Chrome Extension Edition)
 
-FocusForge is a high-performance productivity suite backend refactored to power a gamified **Chrome Extension**. It handles secure authentication, real-time focus sessions, site blocking logic, and social squad leaderboards.
+FocusForge is a high-performance productivity suite backend refactored to power a gamified **Chrome Extension**. It handles secure authentication, real-time focus sessions, site blocking logic, and social squad leaderboards using a unified HTTP + WebSocket architecture.
 
 ## 🚀 Features
 
+- **Hybrid Real-time Architecture**: Unified Node.js server handling both RESTful API requests and WebSocket "Squad Sync" connections on a single port.
 - **Gamified Productivity**: Track focus sessions with unified **Strict Delta XP** (per-minute increments) and dynamic leveling.
 - **Delta-Based Synchronization**: Prevents exponential XP inflation by using atomic `$inc` updates for both XP and focus minutes every 60 seconds.
-- **Chrome Extension Support**: CORS-optimized for `chrome-extension://` origins.
+- **Chrome Extension Support**: CORS-optimized for `chrome-extension://` origins with dynamic extension ID support.
 - **Site Blocking & Mindfulness**: Manage custom blocklists and log mindfulness interception events.
-- **Social Squads**: Create or join squads with live focus status and competitive leaderboards.
+- **Social Squads**: 
+    - **Persistent Squads**: MongoDB-backed groups for long-term XP tracking and membership.
+    - **Live Squad Sync (WebSockets)**: Volatile, real-time rooms for ephemeral focus status broadcasting.
 - **Digital Wellbeing Stats**: Aggregated data on distraction patterns for AI-powered feedback.
 - **Robust Security**: JWT-based stateless authentication with Bcrypt password hashing.
 
 ## 🛠️ Tech Stack
 
-- **Runtime**: [Node.js](https://nodejs.org/)
+- **Runtime**: [Node.js](https://nodejs.org/) (>= 18.0.0)
 - **Framework**: [Express.js](https://expressjs.com/)
+- **Real-time**: [ws (WebSockets)](https://github.com/websockets/ws)
 - **Database**: [MongoDB Atlas](https://www.mongodb.com/atlas)
 - **ORM**: [Mongoose](https://mongoosejs.com/)
-- **Security**: JWT, Bcrypt, CORS
-- **Environment**: Dotenv
+- **Security**: JWT, Bcrypt, CORS (Chrome Extension Optimized)
+- **Deployment**: Production-ready for [Render](https://render.com/)
 
 ## 📂 Project Structure
 
 ```text
 FocusForge-Backend/
-├── middleware/         # Custom middlewares (Auth)
-├── models/             # Mongoose schemas (User, Session, Squad, Blocklist, etc.)
-├── routes/             # API Route handlers (Auth, XP, Sessions, Squads, etc.)
-├── .env                # Environment variables (Local only)
+├── middleware/         # Custom middlewares (Auth validation)
+├── models/             # Mongoose schemas (User, Session, Squad, etc.)
+├── routes/             # API Route handlers
+│   ├── auth.js         # Registration & Login
+│   ├── xp.js           # XP, Profile, and Stats
+│   ├── sessions.js     # Focus session lifecycle
+│   ├── blocklist.js    # Domain management
+│   ├── interceptions.js# Distraction logging
+│   └── squads.js       # Persistent squad management
+├── .env                # Environment variables
 ├── package.json        # Dependencies and scripts
-└── server.js           # Application entry point & configuration
+└── server.js           # Entry point (Unified HTTP + WS Server)
 ```
 
-## 🛣️ API Endpoints
+## 🛣️ API Endpoints (REST)
 
 ### 🔑 Authentication (`/api/auth`)
 | Method | Endpoint    | Description             | Auth |
@@ -57,35 +67,31 @@ FocusForge-Backend/
 | PATCH  | `/:id/fail` | Mark session as failed                           | Yes  |
 | GET    | `/history`  | Get last 20 focus sessions                       | Yes  |
 
-### 🚫 Blocklist (`/api/blocklist`)
-| Method | Endpoint  | Description                              | Auth |
-|--------|-----------|------------------------------------------|------|
-| GET    | `/`       | Fetch the user's blocklist               | Yes  |
-| PUT    | `/`       | Replace entire blocklist array           | Yes  |
-| POST   | `/add`    | Append a domain to the blocklist         | Yes  |
-| DELETE | `/remove` | Remove a domain from the blocklist       | Yes  |
-
-### 🛡️ Interceptions (`/api/interceptions`)
-| Method | Endpoint  | Description                                      | Auth |
-|--------|-----------|--------------------------------------------------|------|
-| POST   | `/log`    | Log a blocked site visit                         | Yes  |
-| GET    | `/recent` | Last 10 interception logs                        | Yes  |
-| GET    | `/context`| Aggregated distraction context for AI            | Yes  |
-
 ### 👥 Squads (`/api/squads`)
 | Method | Endpoint             | Description                                            | Auth |
 |--------|----------------------|--------------------------------------------------------|------|
-| POST   | `/create`            | Create a new productivity squad                        | Yes  |
-| POST   | `/join/:squadId`     | Join an existing squad                                 | Yes  |
+| POST   | `/create`            | Create a new persistent squad (returns 5-digit code)   | Yes  |
+| POST   | `/join`              | Join squad via `{ joinCode }`                          | Yes  |
 | GET    | `/:id/leaderboard`   | Get squad members sorted by focusXP                    | Yes  |
-| PATCH  | `/live-status`       | Update user's 'isLive' focus status                    | Yes  |
+| PATCH  | `/live-status`       | Update user's persistent 'isLive' status               | Yes  |
+| DELETE | `/leave`             | Leave current squad                                    | Yes  |
+
+## 🔌 WebSocket (Squad Sync)
+Connect via `ws://<host>` (or `wss://` in production).
+
+| Action | Payload Example | Description |
+|--------|-----------------|-------------|
+| `host` | `{ "action": "host", "name": "User", "xp": 100 }` | Create a volatile room. Returns `roomId` (5-char). |
+| `join` | `{ "action": "join", "roomId": "ABCDE", "name": "User" }` | Join an ephemeral room. |
+| `update_state`| `{ "action": "update_state", "status": "focusing", "xp": 105 }` | Broadcast status/XP to room. |
+| `leave`| `{ "action": "leave" }` | Leave the current room. |
 
 ---
 
-## 🔒 Security
-- **Stateless JWT**: Bearer token authentication required for all protected routes.
-- **CORS Extension Policy**: Explicitly allows requests from Chrome Extension IDs.
-- **Atomic Operations**: Uses `$inc` and `$set` to prevent race conditions in XP/Stat updates.
+## 🔒 Security & CORS
+- **Stateless JWT**: Bearer token required for protected REST routes.
+- **Dynamic CORS**: Automatically trusts `chrome-extension://` origins to allow any developer extension ID to connect.
+- **Atomic XP**: Uses MongoDB `$inc` to ensure linear XP growth without race conditions.
 
 ---
 Developed with ❤️ by the FocusForge Team.

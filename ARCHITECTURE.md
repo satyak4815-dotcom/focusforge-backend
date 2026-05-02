@@ -1,86 +1,87 @@
 # 🏗️ FocusForge Architecture Documentation
 
-This document outlines the architectural design, data flow, and technical decisions behind the FocusForge Backend, specifically optimized for the Chrome Extension ecosystem.
+This document outlines the architectural design, data flow, and technical decisions behind the FocusForge Backend, optimized for the Chrome Extension ecosystem and real-time collaboration.
 
 ## 1. System Overview
-FocusForge follows a **Layered Monolithic Architecture**. It is designed to be a high-throughput, stateless REST API that manages the gamified lifecycle of focus sessions and social productivity features.
+FocusForge follows a **Layered Monolithic Architecture** with a **Hybrid Communication Layer**. It integrates a stateless REST API for persistence and a stateful WebSocket server for real-time synchronization.
 
-### Architecture Diagram (High Level)
+### High-Level Architecture Diagram
 ```mermaid
 graph TD
-    Client[Chrome Extension] -->|HTTPS/REST| API[Express API Layer]
-    API -->|Auth Middleware| Auth[JWT/Bcrypt Validator]
-    API -->|Business Logic| Controllers[Route Handlers]
-    Controllers -->|Atomic Update| DB[(MongoDB Atlas)]
-    
-    subgraph "Logic Modules"
-        Sess[Session Management]
-        Sqd[Social Squads]
-        Blk[Blocklist Engine]
-        XP[XP & Leveling System]
+    subgraph Clients
+        Ext[Chrome Extension]
+        Dash[Web Dashboard]
     end
-    
-    Controllers --- Sess
-    Controllers --- Sqd
-    Controllers --- Blk
-    Controllers --- XP
+
+    subgraph "Server (Unified Node.js Process)"
+        WS[WS Server /Squad Sync/]
+        API[Express API Layer]
+        Auth[JWT/Bcrypt Validator]
+    end
+
+    subgraph "Persistence"
+        DB[(MongoDB Atlas)]
+    end
+
+    Ext -->|HTTPS/REST| API
+    Ext -->|WSS| WS
+    Dash -->|HTTPS/REST| API
+
+    API --> Auth
+    Auth --> Controllers[Route Handlers]
+    Controllers -->|Atomic Update| DB
+
+    WS -.->|Volatile State| Memory[In-Memory Rooms]
 ```
 
-## 2. Core Modules
+## 2. Communication Layers
 
-### A. Session Engine (`routes/sessions.js`)
-Handles the lifecycle of a focus block. 
-- **Start**: Initializes a session timestamp.
-- **Incremental Sync**: During an active session, the extension sends a strict **delta payload** (`{ xpDelta: 1 }`) to `/api/xp/add-xp` every 60 seconds. This ensures XP and `totalFocusMinutes` are updated atomically in real-time.
-- **End**: Marks the session as completed and updates streak logic. **Crucially, it no longer awards XP at this stage** to prevent double-counting (since XP was already accumulated via minute-ticks).
-- **Fail/Abort**: Marks the session as failed. Future iterations may implement XP rollbacks for failed sessions.
+### A. RESTful API (Stateless Persistence)
+Handles the core business logic where data durability is required.
+- **Authentication**: JWT-based stateless sessions.
+- **XP Management**: Delta-based updates to prevent inflation.
+- **Squad Persistence**: Managing long-term memberships and historical leaderboards.
+- **Blocklists**: Synchronizing domain rules across devices.
 
-### B. Identity & Social (`routes/auth.js`, `routes/squads.js`)
-- **Stateless Auth**: Uses JWT with a 7-day TTL.
-- **Squad Logic**: Competitive clusters where members share `isLive` status and focusXP rankings.
+### B. WebSocket Layer (Stateful Real-time)
+A volatile communication layer attached to the same HTTP port as the Express server.
+- **Purpose**: Low-latency broadcasting of "Live" status and session XP.
+- **Rooms**: In-memory ephemeral clusters (Volatile). Unlike persistent squads, these rooms disappear when the server restarts or all members leave.
+- **Events**: `host`, `join`, `update_state`, and `leave`.
 
-### C. Interception & Blocking (`routes/blocklist.js`, `routes/interceptions.js`)
-- **Domain Management**: Synchronized blocklists between the extension and backend.
-- **Bypass Registry**: Temporary grace periods (2 mins) for "Stolen Time" after correct mindfulness answers.
-- **Interception Logs**: Captures blocked site attempts, categorizing distractions for AI-powered feedback/roasts.
+## 3. The Hybrid Squad Model
+FocusForge distinguishes between **Persistent Squads** and **Volatile Rooms**:
 
-## 3. Real-time State Synchronization
+| Feature | Persistent Squads (REST) | Volatile Rooms (WS) |
+|---------|-------------------------|---------------------|
+| **Storage** | MongoDB | In-Memory (`rooms` object) |
+| **Identity** | 5-Digit Numerical Code | 5-Character Alphanumeric ID |
+| **Membership** | Saved across sessions | Lost on disconnect |
+| **Best For** | Global Rankings, Friend Lists | Live Study Sessions, "Focus Parties" |
+
+## 4. Real-time State Synchronization
 
 ### 📈 Delta-Based XP Sync
 To prevent cumulative XP bugs and visual jitter, FocusForge uses a **Strict Delta Sync** mechanism:
 1. The extension tracks local session time.
-2. Every 60 seconds of focus, it sends `{ xpDelta: 1 }` to the backend.
+2. Every 60 seconds of focus, it sends `{ xpDelta: 1 }` to the backend REST API.
 3. The backend uses MongoDB's `$inc` operator to atomically increment `focusXP` and `totalFocusMinutes`.
-4. This ensures that even if a network request is retried or the extension is reloaded, the XP growth remains linear and accurate.
+4. Simultaneously, the client sends an `update_state` message via WebSocket to broadcast the new XP to the live room.
 
-## 4. Extended Data Model
-
-### User Schema (Central)
-| Field | Type | Description |
-|-------|------|-------------|
-| `username` | String | Unique identity |
-| `focusXP` | Number | Experience points |
-| `level` | Number | Calculated: `floor(XP/100) + 1` |
-| `currentStreak`| Number | Daily focus consistency |
-| `hardModeEnabled`| Boolean| If true, failures have higher penalties |
-| `squadId` | ObjectId | Reference to the user's squad |
-
-### Supporting Schemas
-- **FocusSession**: Tracks start/end, status, and XP yield.
-- **Squad**: Manages member lists, live statuses, and ownership.
-- **Blocklist**: Per-user domain arrays.
-- **InterceptionLog**: Detailed records of blocked domain hits and resolution status.
-
-## 5. Architectural Decisions
+## 5. Security & Connectivity
 
 ### 🛡️ Chrome Extension CORS
-The API implements a dynamic CORS policy that recognizes and trusts `chrome-extension://` origins, facilitating secure communication from the browser's background and sidepanel scripts.
+The API implements a dynamic CORS policy:
+- **Trust-by-Protocol**: Allows any origin starting with `chrome-extension://`. This is critical for supporting multiple developer IDs and side-loading.
+- **Credential Support**: Enables secure cookie/header-based auth from extension background scripts.
 
-### ⚡ Gamification Logic (XP/Leveling)
-The backend enforces dynamic leveling. Instead of client-side calculation, the server re-evaluates levels during XP updates to ensure consistency and prevent tampering.
+### ⚡ Atomic XP Consistency
+The backend re-evaluates levels during every XP update. This ensures that the Level-up logic is always server-side authoritative, preventing client-side spoofing.
 
-### 🔄 Streak Persistence
-Streak logic is calculated server-side. When a session completes, the system compares `lastFocusDate` to the current date. If the gap is exactly 1 day, the streak increments; if larger, it resets.
+## 6. Deployment Architecture (Render)
+The application is designed for single-process deployment on Render.
+- **Port Sharing**: The Node.js `http.Server` instance is shared between Express and the `ws` library.
+- **Environment Aware**: Dynamically switches CORS and DB strings based on environment variables.
 
 ---
-*Last Updated: May 2026 (Extension Refactor)*
+*Last Updated: May 2026 (Unified Port & WS Refactor)*

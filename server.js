@@ -1,6 +1,7 @@
+// ─── Environment & Initialization ─────────────────────────────────────────────
 require('dotenv').config();
 const dns = require('node:dns');
-dns.setDefaultResultOrder('ipv4first');
+dns.setDefaultResultOrder('ipv4first'); // Fix for MongoDB local resolution issues
 
 const http      = require('http');
 const WebSocket = require('ws');
@@ -9,15 +10,22 @@ const mongoose  = require('mongoose');
 const cors      = require('cors');
 
 const app    = express();
-const server = http.createServer(app); // Wrap Express so WS can share the same port
+const server = http.createServer(app); // Unified server for HTTP and WebSockets
 
-// ─── WebSocket Server (Squad Sync) ───────────────────────────────────────────
-// Attached to the HTTP server — NOT a separate port.
+// ─── WebSocket Layer (Real-time Squad Sync) ──────────────────────────────────
+/**
+ * Attached to the HTTP server to share the same port.
+ * Manages volatile, in-memory rooms for live focus synchronization.
+ */
 const wss = new WebSocket.Server({ server });
 
-// rooms: { "ABCD": { users: { "userId": { name, status, xp, ws } } } }
+// In-memory room store: { [roomId]: { users: { [userId]: { name, status, xp, ws } } } }
 const rooms = {};
 
+/**
+ * Broadcasts the current state of a room to all connected participants.
+ * @param {string} roomId 
+ */
 function broadcastRoomState(roomId) {
   if (!rooms[roomId]) return;
 
@@ -111,28 +119,26 @@ wss.on('connection', (ws) => {
   });
 });
 
-// ─── Express Middlewares ──────────────────────────────────────────────────────
+// ─── Express Middleware Configuration ─────────────────────────────────────────
 
-// Dynamic CORS policy — allows the dashboard, local dev, and ANY Chrome extension during development.
+// Dynamic CORS policy — optimized for Local Dev, Dashboards, and Chrome Extensions
 const allowedOrigins = [
   'http://localhost:3000',
-  'http://localhost:5173',  // Vite dev server (web dashboard)
-  process.env.FRONTEND_URL, // Production dashboard URL
+  'http://localhost:5173',  // Vite dev server
+  process.env.FRONTEND_URL, // Production dashboard
 ].filter(Boolean);
 
 app.use(cors({
   origin: (origin, callback) => {
-    // 1. Allow requests with no origin (like Postman or mobile apps)
+    // Allow non-browser requests
     if (!origin) return callback(null, true);
 
-    // 2. Allow if origin is in our explicit allowed list
+    // Allow explicit domains
     if (allowedOrigins.includes(origin)) return callback(null, true);
 
-    // 3. Dynamic check: Allow ANY Chrome Extension origin (starts with chrome-extension://)
-    // This allows team members with different developer extension IDs to connect.
+    // Allow any Chrome Extension (crucial for side-loading & team dev)
     if (origin.startsWith('chrome-extension://')) return callback(null, true);
 
-    // 4. Otherwise, block the request
     callback(new Error(`CORS: origin '${origin}' is not allowed`));
   },
   credentials: true,
@@ -140,46 +146,54 @@ app.use(cors({
 
 app.use(express.json());
 
-// ─── Route Imports ────────────────────────────────────────────────────────────
-const authRoutes        = require('./routes/auth');
-const xpRoutes          = require('./routes/xp');
-const sessionRoutes     = require('./routes/sessions');
-const blocklistRoutes   = require('./routes/blocklist');
+// ─── Route Controller Wiring ──────────────────────────────────────────────────
+const authRoutes         = require('./routes/auth');
+const xpRoutes           = require('./routes/xp');
+const sessionRoutes      = require('./routes/sessions');
+const blocklistRoutes    = require('./routes/blocklist');
 const interceptionRoutes = require('./routes/interceptions');
-const squadRoutes       = require('./routes/squads');
+const squadRoutes        = require('./routes/squads');
+const appsRoutes         = require('./routes/apps');
 
-// ─── Route Wiring ─────────────────────────────────────────────────────────────
+
 app.use('/api/auth',          authRoutes);
 app.use('/api/user',          xpRoutes);
 app.use('/api/sessions',      sessionRoutes);
 app.use('/api/blocklist',     blocklistRoutes);
 app.use('/api/interceptions', interceptionRoutes);
 app.use('/api/squads',        squadRoutes);
+app.use('/api/apps',          appsRoutes);
 
-// Health-check / root
+
+// System Health Check
 app.get('/', (req, res) => {
-  res.json({ message: 'FocusForge API is officially running!' });
+  res.json({ 
+    status: 'online', 
+    message: 'FocusForge Unified API is running.',
+    timestamp: new Date().toISOString()
+  });
 });
 
-// ─── Database Connection ──────────────────────────────────────────────────────
+// ─── Database Connectivity ────────────────────────────────────────────────────
 mongoose.connect(process.env.MONGO_URI)
   .then(() => {
     console.log('✅ MongoDB Atlas Connected Successfully!');
   })
   .catch((error) => {
     console.log('❌ MongoDB Connection Failed:', error.message);
-    console.log('Diagnosis Info - Code:', error.code, 'Hostname:', error.hostname);
   });
 
 // ─── Global Error Handler ─────────────────────────────────────────────────────
 app.use((err, req, res, next) => {
   console.error('Unhandled Error:', err);
-  res.status(500).json({ success: false, message: err.message || 'Internal Server Error' });
+  res.status(500).json({ 
+    success: false, 
+    message: err.message || 'Internal Server Error' 
+  });
 });
 
-// ─── Start (HTTP + WS on the same port) ──────────────────────────────────────
-// Render injects process.env.PORT automatically. Falls back to 3000 for local dev.
+// ─── Server Bootstrap ─────────────────────────────────────────────────────────
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
-  console.log(`🚀 HTTP + WebSocket server listening on port ${PORT}`);
+  console.log(`🚀 Unified HTTP + WebSocket server listening on port ${PORT}`);
 });
