@@ -117,8 +117,9 @@ wss.on('connection', (ws) => {
 const allowedOrigins = [
   'http://localhost:3000',
   'http://localhost:5173',  // Vite dev server (web dashboard)
+  process.env.FRONTEND_URL, // Production dashboard URL
   `chrome-extension://${process.env.EXTENSION_ID || 'YOUR_EXTENSION_ID_HERE'}`,
-];
+].filter(Boolean); // Remove undefined/null if FRONTEND_URL is not set
 
 app.use(cors({
   origin: (origin, callback) => {
