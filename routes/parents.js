@@ -101,7 +101,7 @@ router.get('/linked-children', auth, async (req, res) => {
         const parentId = req.user.userId;
         const parent = await Parent.findById(parentId).populate({
             path: 'children',
-            select: 'username level focusXP currentStreak'
+            select: 'username level focusXP currentStreak totalFocusMinutes'
         });
 
         if (!parent) {
