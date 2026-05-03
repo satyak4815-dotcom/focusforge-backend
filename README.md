@@ -13,6 +13,9 @@ FocusForge is a high-performance productivity suite backend refactored to power 
     - **Persistent Squads**: MongoDB-backed groups for long-term XP tracking and membership.
     - **Live Squad Sync (WebSockets)**: Volatile, real-time rooms for ephemeral focus status broadcasting.
 - **Digital Wellbeing Stats**: Aggregated data on distraction patterns for AI-powered feedback.
+- **Parental Oversight (New)**: 
+    - **Parent Portal**: Dedicated model for guardian management.
+    - **Detailed Website Monitoring**: Tracks domain URLs, visit frequencies (counts), and exact timestamps for every visit.
 - **Robust Security**: JWT-based stateless authentication with Bcrypt password hashing.
 
 ## 🛠️ Tech Stack
@@ -37,7 +40,8 @@ FocusForge-Backend/
 │   ├── sessions.js     # Focus session lifecycle
 │   ├── blocklist.js    # Domain management
 │   ├── interceptions.js# Distraction logging
-│   └── squads.js       # Persistent squad management
+│   ├── squads.js       # Persistent squad management
+│   └── parents.js      # Parent portal & child monitoring
 ├── .env                # Environment variables
 ├── package.json        # Dependencies and scripts
 └── server.js           # Entry point (Unified HTTP + WS Server)
@@ -75,6 +79,13 @@ FocusForge-Backend/
 | GET    | `/:id/leaderboard`   | Get squad members sorted by focusXP                    | Yes  |
 | PATCH  | `/live-status`       | Update user's persistent 'isLive' status               | Yes  |
 | DELETE | `/leave`             | Leave current squad                                    | Yes  |
+
+### 👨‍👩‍👧 Parental Oversight (`/api/parents`)
+| Method | Endpoint             | Description                                            | Auth |
+|--------|----------------------|--------------------------------------------------------|------|
+| POST   | `/register`          | Create a parent account                                | No   |
+| POST   | `/link-child`        | Link a student account via email                       | Parent|
+| GET    | `/child-activity`    | View detailed child activity (counts & timestamps)     | Parent|
 
 ## 🔌 WebSocket (Squad Sync)
 Connect via `ws://<host>` (or `wss://` in production).

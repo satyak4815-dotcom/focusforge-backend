@@ -11,6 +11,7 @@ graph TD
     subgraph Clients
         Ext[Chrome Extension]
         Dash[Web Dashboard]
+        ParentPortal[Parental Oversight Portal]
     end
 
     subgraph "Server (Unified Node.js Process)"
@@ -26,6 +27,7 @@ graph TD
     Ext -->|HTTPS/REST| API
     Ext -->|WSS| WS
     Dash -->|HTTPS/REST| API
+    ParentPortal -->|Auth/REST| API
 
     API --> Auth
     Auth --> Controllers[Route Handlers]
@@ -42,6 +44,7 @@ Handles the core business logic where data durability is required.
 - **XP Management**: Delta-based updates to prevent inflation.
 - **Squad Persistence**: Managing long-term memberships and historical leaderboards.
 - **Blocklists**: Synchronizing domain rules across devices.
+- **Parental Oversight**: Linking parent accounts to child users for activity monitoring.
 
 ### B. WebSocket Layer (Stateful Real-time)
 A volatile communication layer attached to the same HTTP port as the Express server.
@@ -68,6 +71,15 @@ To prevent cumulative XP bugs and visual jitter, FocusForge uses a **Strict Delt
 3. The backend uses MongoDB's `$inc` operator to atomically increment `focusXP` and `totalFocusMinutes`.
 4. Simultaneously, the client sends an `update_state` message via WebSocket to broadcast the new XP to the live room.
 
+### 🕵️‍♂️ Detailed Website Activity Tracking (Parental Portal)
+To support granular parental oversight, FocusForge uses a nested object structure for activity monitoring:
+1. **Event Capture**: The Chrome Extension monitors tab navigation.
+2. **Atomic Updates**: When a user visits a site, the backend performs a check:
+    - If the site is new, it initializes a tracking object: `{ url, visitCount: 1, accessTimes: [now] }`.
+    - If the site exists, it increments the `visitCount` and pushes a new timestamp to `accessTimes`.
+3. **Data Richness**: This allows parents to see not just *which* sites were visited, but *when* and *how often*, providing a clear picture of distraction patterns.
+4. **Retrieval**: Parents linked to the account can retrieve this data via the `/api/parents/child-activity` endpoint.
+
 ## 5. Security & Connectivity
 
 ### 🛡️ Chrome Extension CORS
@@ -84,4 +96,4 @@ The application is designed for single-process deployment on Render.
 - **Environment Aware**: Dynamically switches CORS and DB strings based on environment variables.
 
 ---
-*Last Updated: May 2026 (Unified Port & WS Refactor)*
+*Last Updated: May 2026 (Parental Oversight & Unified WS Refactor)*

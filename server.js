@@ -155,6 +155,11 @@ const interceptionRoutes = require('./routes/interceptions');
 const squadRoutes        = require('./routes/squads');
 const appsRoutes         = require('./routes/apps');
 
+// Verification Models
+const User   = require('./models/User');
+const Parent = require('./models/Parent');
+
+
 
 app.use('/api/auth',          authRoutes);
 app.use('/api/user',          xpRoutes);
@@ -173,6 +178,154 @@ app.get('/', (req, res) => {
     timestamp: new Date().toISOString()
   });
 });
+
+// ─── Verification & Seeding Routes (Temporary) ────────────────────────────────
+
+// 1. Parent Model Test Route
+app.get('/verify-parent', async (req, res) => {
+  try {
+    console.log('\n--- Parent Verification Check ---');
+    console.log('Target Host:', mongoose.connection.host);
+    console.log('Target Database:', mongoose.connection.name);
+
+    const dummyParent = new Parent({
+      username: 'testparent_' + Math.floor(Math.random() * 1000),
+      email: `parent_${Date.now()}@example.com`
+    });
+
+    const savedParent = await dummyParent.save();
+    res.json({
+      success: true,
+      message: 'Parent document created successfully.',
+      connection: {
+        host: mongoose.connection.host,
+        db: mongoose.connection.name
+      },
+      data: savedParent
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// 2. User Model Test Route
+app.get('/verify-user-website', async (req, res) => {
+  try {
+    console.log('\n--- User Website Verification Check ---');
+    console.log('Target Host:', mongoose.connection.host);
+    console.log('Target Database:', mongoose.connection.name);
+
+    // Find any user to update
+    const user = await User.findOne();
+    if (!user) {
+      return res.status(404).json({ success: false, message: 'No user found to update. Please register a user first.' });
+    }
+
+    // Use $push to add "github.com" to visitedWebsites
+    const updatedUser = await User.findByIdAndUpdate(
+      user._id,
+      { $push: { visitedWebsites: 'github.com' } },
+      { new: true }
+    );
+
+    res.json({
+      success: true,
+      message: 'User visitedWebsites updated successfully.',
+      connection: {
+        host: mongoose.connection.host,
+        db: mongoose.connection.name
+      },
+      data: {
+        userId: updatedUser._id,
+        username: updatedUser.username,
+        visitedWebsites: updatedUser.visitedWebsites
+      }
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// 3. Detailed Website Tracking Test Route
+app.get('/verify-detailed-websites', async (req, res) => {
+  try {
+    console.log('\n--- Detailed Website Verification Check ---');
+    console.log('Target Host:', mongoose.connection.host);
+    console.log('Target Database:', mongoose.connection.name);
+
+    const testUrl = 'instagram.com';
+    
+    // Find a test user
+    const user = await User.findOne();
+    if (!user) {
+      return res.status(404).json({ success: false, message: 'No user found. Please register a user first.' });
+    }
+
+    // Check if the URL already exists in visitedWebsites
+    const siteIndex = user.visitedWebsites.findIndex(site => site.url === testUrl);
+
+    if (siteIndex === -1) {
+      // NEW SITE: Push new object
+      user.visitedWebsites.push({
+        url: testUrl,
+        visitCount: 1,
+        accessTimes: [new Date()]
+      });
+      console.log(`Added new entry for ${testUrl}`);
+    } else {
+      // EXISTING SITE: Increment count and push timestamp
+      user.visitedWebsites[siteIndex].visitCount += 1;
+      user.visitedWebsites[siteIndex].accessTimes.push(new Date());
+      console.log(`Updated existing entry for ${testUrl}. New count: ${user.visitedWebsites[siteIndex].visitCount}`);
+    }
+
+    // Save the user document
+    await user.save();
+
+    res.json({
+      success: true,
+      message: `Simulated visit to ${testUrl} recorded.`,
+      connection: {
+        host: mongoose.connection.host,
+        db: mongoose.connection.name
+      },
+      data: {
+        userId: user._id,
+        username: user.username,
+        visitedWebsites: user.visitedWebsites
+      }
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// 4. Database Cleanup Route (Wipe corrupted website data)
+app.get('/cleanup-websites', async (req, res) => {
+  try {
+    console.log('\n--- Database Cleanup Initiated ---');
+    
+    // Reset visitedWebsites for ALL users to clear out old string-based data
+    const result = await User.updateMany(
+      {}, 
+      { $set: { visitedWebsites: [] } }
+    );
+
+    console.log(`Cleanup complete. Modified ${result.modifiedCount} users.`);
+    
+    res.json({
+      success: true,
+      message: 'Successfully cleared visitedWebsites for all users to resolve schema conflicts.',
+      modifiedCount: result.modifiedCount
+    });
+  } catch (error) {
+    console.error('Cleanup Error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+
+
 
 // ─── Database Connectivity ────────────────────────────────────────────────────
 mongoose.connect(process.env.MONGO_URI)

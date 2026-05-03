@@ -66,7 +66,13 @@ const userSchema = new mongoose.Schema({
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Squad',
     default: null
-  }
+  },
+  // Tracks domains visited by the user — used by the Parent Portal
+  visitedWebsites: [{
+    url: { type: String, required: true },
+    visitCount: { type: Number, default: 1 },
+    accessTimes: { type: [Date], default: () => [new Date()] }
+  }]
 });
 
 // Instance method to auto-calculate and update level based on focusXP
