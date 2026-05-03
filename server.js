@@ -124,24 +124,36 @@ wss.on('connection', (ws) => {
 // Dynamic CORS policy — optimized for Local Dev, Dashboards, and Chrome Extensions
 const allowedOrigins = [
   'http://localhost:3000',
-  'http://localhost:5173',  // Vite dev server
+  'http://localhost:5173',  // Vite dev server (default)
+  'http://localhost:5174',  // Vite dev server (alternative)
   process.env.FRONTEND_URL, // Production dashboard
 ].filter(Boolean);
 
 app.use(cors({
   origin: (origin, callback) => {
-    // Allow non-browser requests
-    if (!origin) return callback(null, true);
+    // 1. Allow non-browser requests (e.g. Postman, server-to-server)
+    // 2. Allow requests where origin is the string 'null' (local file testing/mobile)
+    if (!origin || origin === 'null') {
+      return callback(null, true);
+    }
 
-    // Allow explicit domains
-    if (allowedOrigins.includes(origin)) return callback(null, true);
+    // 3. Allow explicit domains from our whitelist
+    if (allowedOrigins.includes(origin)) {
+      return callback(null, true);
+    }
 
-    // Allow any Chrome Extension (crucial for side-loading & team dev)
-    if (origin.startsWith('chrome-extension://')) return callback(null, true);
+    // 4. Allow any Chrome Extension (crucial for side-loading & team dev)
+    if (origin.startsWith('chrome-extension://')) {
+      return callback(null, true);
+    }
 
+    // If none of the above, reject the request
+    console.error(`Blocked by CORS: ${origin}`);
     callback(new Error(`CORS: origin '${origin}' is not allowed`));
   },
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   credentials: true,
+  allowedHeaders: ['Content-Type', 'Authorization'], // Standard headers for FocusForge
 }));
 
 app.use(express.json());
