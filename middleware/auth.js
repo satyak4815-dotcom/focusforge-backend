@@ -20,7 +20,7 @@ const verifyToken = (req, res, next) => {
     if (error.message && error.message.includes('JWT_SECRET')) {
         return next(error);
     }
-    res.status(403).json({ message: 'Invalid or Expired Token' });
+    res.status(401).json({ message: 'Invalid or Expired Token' });
   }
 };
 

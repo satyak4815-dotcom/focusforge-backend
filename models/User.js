@@ -67,11 +67,14 @@ const userSchema = new mongoose.Schema({
     ref: 'Squad',
     default: null
   },
-  // Tracks domains visited by the user — used by the Parent Portal
+  // Tracks domains visited by the user — used by the Parent Portal & Focus Guard extension
   visitedWebsites: [{
     url: { type: String, required: true },
+    domain: { type: String },
     visitCount: { type: Number, default: 1 },
-    accessTimes: { type: [Date], default: () => [new Date()] }
+    accessTimes: { type: [Date], default: () => [new Date()] },
+    isBlocked: { type: Boolean, default: false },
+    visitType: { type: String, default: 'normal' }
   }]
 });
 
