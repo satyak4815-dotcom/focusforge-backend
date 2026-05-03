@@ -3,6 +3,7 @@ const router = express.Router();
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const User = require('../models/User');
+const Parent = require('../models/Parent');
 
 // POST /register - Register a new user
 router.post('/register', async (req, res, next) => {
@@ -50,7 +51,14 @@ router.post('/login', async (req, res, next) => {
     const isEmail = loginIdentifier.includes('@');
     const query = isEmail ? { email: loginIdentifier } : { username: loginIdentifier };
 
-    const user = await User.findOne(query);
+    let user = await User.findOne(query);
+    let isParent = false;
+    
+    if (!user) {
+      user = await Parent.findOne(query);
+      isParent = true;
+    }
+
     if (!user) {
       return res.status(400).json({ message: 'Invalid credentials' });
     }

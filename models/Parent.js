@@ -14,6 +14,14 @@ const parentSchema = new mongoose.Schema({
     lowercase: true,
     trim: true
   },
+  password: {
+    type: String,
+    required: true
+  },
+  role: {
+    type: String,
+    default: 'parent'
+  },
   children: [{
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User'

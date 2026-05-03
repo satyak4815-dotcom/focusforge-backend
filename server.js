@@ -166,6 +166,8 @@ const blocklistRoutes    = require('./routes/blocklist');
 const interceptionRoutes = require('./routes/interceptions');
 const squadRoutes        = require('./routes/squads');
 const appsRoutes         = require('./routes/apps');
+const parentsRoutes=require('./routes/parents');
+
 
 // Verification Models
 const User   = require('./models/User');
@@ -180,6 +182,7 @@ app.use('/api/blocklist',     blocklistRoutes);
 app.use('/api/interceptions', interceptionRoutes);
 app.use('/api/squads',        squadRoutes);
 app.use('/api/apps',          appsRoutes);
+app.use('/api/parents',parentsRoutes);
 
 
 // System Health Check
