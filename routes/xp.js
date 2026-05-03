@@ -1,6 +1,5 @@
 const express = require('express');
 const router = express.Router();
-const jwt = require('jsonwebtoken');
 const User = require('../models/User');
 
 const verifyToken = require('../middleware/auth');
@@ -125,6 +124,24 @@ router.get('/stats', verifyToken, async (req, res, next) => {
       focusCoins: user.focusCoins,
       totalFocusMinutes: user.totalFocusMinutes,
       distractionsBlocked: user.distractionsBlocked
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// GET /all-users
+// Fetches all users from the User collection (password excluded).
+// Auth intentionally disabled for temporary testing.
+router.get('/all-users', async (req, res, next) => {
+  try {
+    const users = await User.find({})
+      .select('-password')
+      .sort({ _id: -1 });
+
+    res.json({
+      total: users.length,
+      users
     });
   } catch (error) {
     next(error);

@@ -194,6 +194,11 @@ app.get('/', (req, res) => {
   });
 });
 
+// Simple browser test route
+app.get('/hello', (req, res) => {
+  res.send('Hello World');
+});
+
 // ─── Verification & Seeding Routes (Temporary) ────────────────────────────────
 
 // 1. Parent Model Test Route

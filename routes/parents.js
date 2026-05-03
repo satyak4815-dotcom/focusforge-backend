@@ -96,7 +96,7 @@ router.post('/link-child', auth, async (req, res) => {
 });
 
 // GET /api/parents/linked-children
-router.get('/parent/linked-children', auth, async (req, res) => {
+router.get('/linked-children', auth, async (req, res) => {
     try {
         const parentId = req.user.userId;
         const parent = await Parent.findById(parentId).populate({
