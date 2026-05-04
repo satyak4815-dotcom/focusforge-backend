@@ -344,6 +344,21 @@ router.get('/stats', verifyToken, async (req, res, next) => {
   }
 });
 
+async function listVisitedWebsites(req, res, next) {
+  try {
+    const user = await User.findById(req.user.userId).select('visitedWebsites');
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+    res.json(user.visitedWebsites || []);
+  } catch (error) {
+    next(error);
+  }
+}
+
+// GET /visited-websites & /visitedWebsites — list current user's visit history
+router.get(['/visited-websites', '/visitedWebsites'], verifyToken, listVisitedWebsites);
+
 // POST /visited-websites & /visitedWebsites — Focus Guard extension visit sync (same handler)
 router.post('/visited-websites', verifyToken, recordVisitedWebsite);
 router.post('/visitedWebsites', verifyToken, recordVisitedWebsite);
