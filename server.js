@@ -126,8 +126,13 @@ const allowedOrigins = [
   'http://localhost:3000',
   'http://localhost:5173',  // Vite dev server (default)
   'http://localhost:5174',  // Vite dev server (alternative)
+  'http://localhost:5175',  // Vite dev server (when default ports are taken)
   process.env.FRONTEND_URL, // Production dashboard
 ].filter(Boolean);
+
+/** Any http(s)://localhost[:port] — Vite often shifts port when 5173+ are busy */
+const isLocalhostOrigin = (o) =>
+  /^https?:\/\/localhost(?::\d+)?$/i.test(o);
 
 app.use(cors({
   origin: (origin, callback) => {
@@ -137,12 +142,17 @@ app.use(cors({
       return callback(null, true);
     }
 
-    // 3. Allow explicit domains from our whitelist
+    // 3. Local dev: any localhost port (preflight from Vite, etc.)
+    if (isLocalhostOrigin(origin)) {
+      return callback(null, true);
+    }
+
+    // 4. Allow explicit domains from our whitelist
     if (allowedOrigins.includes(origin)) {
       return callback(null, true);
     }
 
-    // 4. Allow any Chrome Extension (crucial for side-loading & team dev)
+    // 5. Allow any Chrome Extension (crucial for side-loading & team dev)
     if (origin.startsWith('chrome-extension://')) {
       return callback(null, true);
     }
